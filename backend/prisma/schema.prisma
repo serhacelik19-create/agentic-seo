@@ -1,0 +1,87 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Domain {
+  id          String   @id @default(uuid())
+  domainUrl   String   @unique
+  name        String
+  brandTone   String?
+  webflowConfig String?  // JSON string containing custom Webflow field mappings
+  
+  articles    Article[]
+  outlines    Outline[]
+  competitorAnalyses CompetitorAnalysis[]
+  autopilotKeywords  AutopilotKeyword[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model CompetitorAnalysis {
+  id        String   @id @default(uuid())
+  keyword   String   @unique
+  competitors String // JSON string of competitors data (title, url, headings)
+  domainId  String?
+  domain    Domain?  @relation(fields: [domainId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Outline {
+  id        String   @id @default(uuid())
+  keyword   String   @unique
+  headings  String   // JSON string of custom outline headings
+  domainId  String?
+  domain    Domain?  @relation(fields: [domainId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Article {
+  id            String    @id @default(uuid())
+  keyword       String    @unique
+  title         String
+  content       String    // HTML code
+  tone          String
+  seoScore      Int       @default(0)
+  status        String    // "draft" | "published"
+  publishedUrl  String?
+  featuredImage String?   // URL of header/featured image
+  lastCheckedAt DateTime? // Reflection: last checked ranking
+  googleRank    Int?      // Reflection: ranking position
+  proposedContent String?
+  proposedSeoScore Int?
+  hasPendingRecovery Boolean   @default(false)
+  domainId      String?
+  domain        Domain?   @relation(fields: [domainId], references: [id])
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model AutopilotKeyword {
+  id        String   @id @default(uuid())
+  keyword   String   @unique
+  status    String   // "pending" | "processing" | "completed"
+  domainId  String?
+  domain    Domain?  @relation(fields: [domainId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AutopilotLog {
+  id        String   @id @default(uuid())
+  keyword   String
+  step      Int
+  agentName String
+  message   String
+  status    String
+  createdAt DateTime @default(now())
+}
+
+
