@@ -17,9 +17,21 @@ const app = express();
 const PORT = process.env.PORT || 5001;
 
 // CORS and body parser configuration
-app.use(cors({
-  origin: '*', // Allow connections from frontend clients
-}));
+const allowedOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(',').map((o) => o.trim())
+  : ['http://localhost:3000', 'http://localhost:5001'];
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error(`CORS policy violation: Origin ${origin} not allowed.`));
+    },
+    credentials: true,
+  })
+);
 app.use(express.json({ limit: '10mb' })); // Increase payload limit for large articles
 
 // Health check endpoint

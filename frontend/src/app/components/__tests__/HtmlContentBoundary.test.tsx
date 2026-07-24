@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, act } from '@testing-library/react';
+import { render, act } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { HtmlContentBoundary } from '../HtmlContentBoundary';
 
@@ -97,5 +97,20 @@ describe('HtmlContentBoundary', () => {
 
     const wrapper = container.querySelector('.styled');
     expect(wrapper).toHaveStyle({ color: 'rgb(255, 0, 0)' });
+  });
+
+  it('should sanitize dangerous script content', async () => {
+    const { container } = render(
+      <HtmlContentBoundary
+        content='<p>Safe</p><script>alert("xss")</script>'
+        className="xss"
+      />
+    );
+
+    await act(async () => {});
+
+    const wrapper = container.querySelector('.xss');
+    expect(wrapper!.innerHTML).not.toContain('<script>');
+    expect(wrapper!.innerHTML).toContain('<p>Safe</p>');
   });
 });

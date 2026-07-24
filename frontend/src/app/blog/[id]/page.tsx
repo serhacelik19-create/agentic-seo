@@ -2,8 +2,10 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useParams } from 'next/navigation';
 import { HtmlContentBoundary } from '../../components/HtmlContentBoundary';
+import { getApiUrl } from '@/lib/api';
 
 interface Article {
   id: string;
@@ -29,7 +31,7 @@ export default function BlogPostDetail() {
 
     const fetchArticle = async () => {
       try {
-        const res = await fetch('http://localhost:5001/api/published-articles?includeDrafts=true');
+        const res = await fetch(getApiUrl('/api/published-articles?includeDrafts=true'));
         const data = await res.json();
         
         if (data.success) {
@@ -86,11 +88,13 @@ export default function BlogPostDetail() {
         </Link>
 
         {article.featuredImage && (
-          <div style={{ width: '100%', height: '350px', borderRadius: '24px', overflow: 'hidden', border: '1px solid rgba(0,0,0,0.06)', boxShadow: '0 20px 40px -10px rgba(0,0,0,0.05)', marginBottom: '2.5rem' }}>
-            <img 
+          <div style={{ width: '100%', height: '350px', borderRadius: '24px', overflow: 'hidden', border: '1px solid rgba(0,0,0,0.06)', boxShadow: '0 20px 40px -10px rgba(0,0,0,0.05)', marginBottom: '2.5rem', position: 'relative' }}>
+            <Image 
               src={article.featuredImage} 
               alt={article.title}
-              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              fill
+              unoptimized
+              style={{ objectFit: 'cover' }}
             />
           </div>
         )}

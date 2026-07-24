@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { getApiUrl, getAuthHeaders } from '@/lib/api';
 
 interface Domain {
   id: string;
@@ -54,15 +55,15 @@ export default function DashboardPage() {
     }, 5000);
   };
 
-  const fetchData = async () => {
+  const fetchData = React.useCallback(async () => {
     try {
-      const articlesRes = await fetch('http://localhost:5001/api/published-articles?includeDrafts=true');
+      const articlesRes = await fetch(getApiUrl('/api/published-articles?includeDrafts=true'));
       const articlesData = await articlesRes.json();
       if (articlesData.success) {
         setArticles(articlesData.articles);
       }
       
-      const domainsRes = await fetch('http://localhost:5001/api/domains');
+      const domainsRes = await fetch(getApiUrl('/api/domains'));
       const domainsData = await domainsRes.json();
       if (Array.isArray(domainsData)) {
         setDomains(domainsData);
@@ -71,24 +72,44 @@ export default function DashboardPage() {
       console.error('Failed to fetch dashboard data:', err);
     }
     setLoading(false);
-  };
+  }, []);
 
   useEffect(() => {
-    fetchData();
+    let ignore = false;
+    const init = async () => {
+      try {
+        const articlesRes = await fetch(getApiUrl('/api/published-articles?includeDrafts=true'));
+        const articlesData = await articlesRes.json();
+        if (!ignore && articlesData.success) {
+          setArticles(articlesData.articles);
+        }
+        
+        const domainsRes = await fetch(getApiUrl('/api/domains'));
+        const domainsData = await domainsRes.json();
+        if (!ignore && Array.isArray(domainsData)) {
+          setDomains(domainsData);
+        }
+      } catch (err) {
+        console.error('Failed to fetch dashboard data:', err);
+      }
+      if (!ignore) setLoading(false);
+    };
+    init();
+    return () => { ignore = true; };
   }, []);
 
   const handleUpdateRank = async (id: string) => {
     setUpdatingRankId(id);
     try {
-      const res = await fetch('http://localhost:5001/api/article-rank/update', {
+      const res = await fetch(getApiUrl('/api/article-rank/update'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ id })
       });
       const data = await res.json();
       if (data.success) {
         // Refresh articles
-        const articlesRes = await fetch('http://localhost:5001/api/published-articles?includeDrafts=true');
+        const articlesRes = await fetch(getApiUrl('/api/published-articles?includeDrafts=true'));
         const articlesData = await articlesRes.json();
         if (articlesData.success) {
           setArticles(articlesData.articles);
@@ -127,8 +148,9 @@ export default function DashboardPage() {
     sentinelAbortRef.current = controller;
 
     try {
-      const res = await fetch('http://localhost:5001/api/autopilot/sentinel', {
+      const res = await fetch(getApiUrl('/api/autopilot/sentinel'), {
         method: 'POST',
+        headers: getAuthHeaders(),
         signal: controller.signal
       });
       const data = await res.json();
@@ -154,9 +176,9 @@ export default function DashboardPage() {
   const handleApproveRecovery = async (articleId: string, approve: boolean) => {
     setProcessingApprovalId(articleId);
     try {
-      const res = await fetch('http://localhost:5001/api/autopilot/approve-recovery', {
+      const res = await fetch(getApiUrl('/api/autopilot/approve-recovery'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ articleId, approve })
       });
       const data = await res.json();
@@ -186,9 +208,9 @@ export default function DashboardPage() {
     setScanningCompetitor(true);
     setClusterStrategy(null);
     try {
-      const res = await fetch('http://localhost:5001/api/competitor/sitemap-scan', {
+      const res = await fetch(getApiUrl('/api/competitor/sitemap-scan'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ competitorDomain })
       });
       const data = await res.json();
@@ -209,9 +231,9 @@ export default function DashboardPage() {
     if (!clusterStrategy) return;
     setEnqueuingCluster(true);
     try {
-      const res = await fetch('http://localhost:5001/api/competitor/approve-cluster', {
+      const res = await fetch(getApiUrl('/api/competitor/approve-cluster'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           pillar: clusterStrategy.pillar,
           support1: clusterStrategy.support1,
@@ -878,7 +900,7 @@ export default function DashboardPage() {
                       <span>Autonomous Sentinel Alert: Search Rank Drop Detected!</span>
                     </div>
                     <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: '1.45' }}>
-                      Through Google Search Console tracking, your rank for keyword <strong>"{a.keyword}"</strong> dropped to <strong>#{a.googleRank || 'Unranked'}</strong>. Our agent re-analyzed competitors and crafted a higher semantic value draft (Proposed Score: <strong>{a.proposedSeoScore}/100</strong>).
+                      Through Google Search Console tracking, your rank for keyword <strong>&quot;{a.keyword}&quot;</strong> dropped to <strong>#{a.googleRank || 'Unranked'}</strong>. Our agent re-analyzed competitors and crafted a higher semantic value draft (Proposed Score: <strong>{a.proposedSeoScore}/100</strong>).
                     </p>
                     <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.25rem' }}>
                       <button 

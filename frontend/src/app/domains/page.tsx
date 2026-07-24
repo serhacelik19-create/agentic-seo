@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { getApiUrl, getAuthHeaders } from '@/lib/api';
 
 interface Domain {
   id: string;
@@ -24,26 +25,37 @@ export default function DomainsPage() {
   const [bodyField, setBodyField] = useState('post-body');
   const [imageField, setImageField] = useState('main-image');
 
-  const fetchDomains = async () => {
+  const fetchDomains = React.useCallback(async () => {
     try {
-      const res = await fetch('http://localhost:5001/api/domains');
+      const res = await fetch(getApiUrl('/api/domains'));
       const data = await res.json();
       setDomains(data);
     } catch (err) {
       console.error(err);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    fetchDomains();
+    let ignore = false;
+    const init = async () => {
+      try {
+        const res = await fetch(getApiUrl('/api/domains'));
+        const data = await res.json();
+        if (!ignore) setDomains(data);
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    init();
+    return () => { ignore = true; };
   }, []);
 
   const handleSaveWebflowConfig = async (domainId: string) => {
     try {
       const config = { titleField, slugField, bodyField, imageField };
-      const res = await fetch(`http://localhost:5001/api/domains/${domainId}/webflow-config`, {
+      const res = await fetch(getApiUrl(`/api/domains/${domainId}/webflow-config`), {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ webflowConfig: config })
       });
       const data = await res.json();
@@ -62,9 +74,9 @@ export default function DomainsPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      await fetch('http://localhost:5001/api/domains', {
+      await fetch(getApiUrl('/api/domains'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ domainUrl: url, name, brandTone: tone })
       });
       setUrl('');
@@ -80,7 +92,7 @@ export default function DomainsPage() {
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this domain? This will unbind it from any active processes.')) return;
     try {
-      await fetch(`http://localhost:5001/api/domains/${id}`, { method: 'DELETE' });
+      await fetch(getApiUrl(`/api/domains/${id}`), { method: 'DELETE', headers: getAuthHeaders() });
       fetchDomains();
     } catch (err) {
       console.error(err);

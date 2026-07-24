@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { HtmlContentBoundary } from './components/HtmlContentBoundary';
+import { getApiUrl, getEventSourceUrl, getAuthHeaders } from '@/lib/api';
 
 // Type Definitions
 interface Domain {
@@ -223,9 +224,11 @@ export default function Dashboard() {
   const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeoutMs = 10000): Promise<Response> => {
     const controller = new AbortController();
     const id = setTimeout(() => controller.abort(), timeoutMs);
+    const headers = getAuthHeaders(options.headers as Record<string, string> || {});
     try {
       const response = await fetch(url, {
         ...options,
+        headers,
         signal: controller.signal
       });
       clearTimeout(id);
@@ -254,7 +257,7 @@ export default function Dashboard() {
     setActiveLogKeyword(kw);
     setLoadingLogs(true);
     try {
-      const res = await fetch(`http://localhost:5001/api/autopilot/logs/${encodeURIComponent(kw)}`);
+      const res = await fetch(getApiUrl(`/api/autopilot/logs/${encodeURIComponent(kw)}`));
       const data = await res.json();
       if (data.success && data.logs) {
         setKeywordLogs(data.logs);
@@ -298,7 +301,7 @@ export default function Dashboard() {
 
   const runGEOAnalysis = async (contentStr: string) => {
     try {
-      const res = await fetch('http://localhost:5001/api/geo/analyze', {
+      const res = await fetch(getApiUrl('/api/geo/analyze'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ keyword, content: contentStr })
@@ -327,9 +330,9 @@ export default function Dashboard() {
   ];
 
   // Fetch autopilot queue
-  const fetchAutopilotQueue = async () => {
+  const fetchAutopilotQueue = React.useCallback(async () => {
     try {
-      const res = await fetchWithTimeout('http://localhost:5001/api/autopilot/keywords', {}, 10000);
+      const res = await fetchWithTimeout(getApiUrl('/api/autopilot/keywords'), {}, 10000);
       const data = await res.json();
       if (data.success && data.keywords) {
         setAutopilotKeywords(data.keywords);
@@ -337,19 +340,7 @@ export default function Dashboard() {
     } catch (err: unknown) {
       console.error('Failed to fetch queue:', err);
     }
-  };
-
-  const fetchDomains = async () => {
-    try {
-      const res = await fetchWithTimeout('http://localhost:5001/api/domains', {}, 10000);
-      const data = await res.json();
-      setDomains(data);
-      if (data.length > 0) setSelectedDomain(data[0].id);
-    } catch (err: unknown) {
-      console.error('Failed to fetch domains:', err);
-      showNotification('Failed to connect to backend domain manager.', 'error');
-    }
-  };
+  }, []);
 
   const startProgressTracking = (keywordTarget: string) => {
     setKeyword(keywordTarget); // Immediately update keyword focus in UI!
@@ -361,7 +352,7 @@ export default function Dashboard() {
       progressEventSourceRef.current.close();
     }
     
-    const eventSource = new EventSource('http://localhost:5001/api/progress');
+    const eventSource = new EventSource(getEventSourceUrl('/api/progress'));
     progressEventSourceRef.current = eventSource;
     
     eventSource.onmessage = (event) => {
@@ -422,19 +413,43 @@ export default function Dashboard() {
   };
 
   React.useEffect(() => {
-    fetchAutopilotQueue();
-    fetchDomains();
+    let ignore = false;
+    const init = async () => {
+      try {
+        const queueRes = await fetchWithTimeout(getApiUrl('/api/autopilot/keywords'), {}, 10000);
+        const queueData = await queueRes.json();
+        if (!ignore && queueData.success && queueData.keywords) {
+          setAutopilotKeywords(queueData.keywords);
+        }
+      } catch (err: unknown) {
+        console.error('Failed to fetch queue:', err);
+      }
+
+      try {
+        const domRes = await fetchWithTimeout(getApiUrl('/api/domains'), {}, 10000);
+        const domData = await domRes.json();
+        if (!ignore) {
+          setDomains(domData);
+          if (domData.length > 0) setSelectedDomain(domData[0].id);
+        }
+      } catch (err: unknown) {
+        console.error('Failed to fetch domains:', err);
+      }
+    };
+
+    init();
 
     // Poll queue every 5 seconds
     const interval = setInterval(fetchAutopilotQueue, 5000);
 
     return () => {
+      ignore = true;
       clearInterval(interval);
       if (progressEventSourceRef.current) {
         progressEventSourceRef.current.close();
       }
     };
-  }, []);
+  }, [fetchAutopilotQueue]);
 
   // Add keyword to autopilot queue
   const addAutopilotKeyword = async (e: React.FormEvent) => {
@@ -442,7 +457,7 @@ export default function Dashboard() {
     if (!newAutopilotKeyword.trim()) return;
 
     try {
-      const res = await fetchWithTimeout('http://localhost:5001/api/autopilot/keywords', {
+      const res = await fetchWithTimeout(getApiUrl('/api/autopilot/keywords'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ keyword: newAutopilotKeyword })
@@ -467,7 +482,7 @@ export default function Dashboard() {
     if (!confirm("Are you sure you want to remove this keyword from the Autopilot queue?")) return;
 
     try {
-      const res = await fetchWithTimeout(`http://localhost:5001/api/autopilot/keywords/${id}`, {
+      const res = await fetchWithTimeout(getApiUrl(`/api/autopilot/keywords/${id}`), {
         method: 'DELETE'
       }, 10000);
       const data = await res.json();
@@ -493,7 +508,7 @@ export default function Dashboard() {
       setAutopilotKeywords(prev => prev.map(k => k.id === pending.id ? { ...k, status: 'processing' } as AutopilotKeyword : k));
     }
     try {
-      const res = await fetchWithTimeout('http://localhost:5001/api/autopilot/trigger', {
+      const res = await fetchWithTimeout(getApiUrl('/api/autopilot/trigger'), {
         method: 'POST'
       }, 45000); // 45 seconds timeout bounds for full queue analysis
       const data = await res.json();
@@ -519,7 +534,7 @@ export default function Dashboard() {
   const triggerReflection = async (articleId: string) => {
     setLoading(true);
     try {
-      const res = await fetchWithTimeout('http://localhost:5001/api/autopilot/reflect', {
+      const res = await fetchWithTimeout(getApiUrl('/api/autopilot/reflect'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ articleId, currentRank: 8 }) // simulated low ranking #8
@@ -551,7 +566,7 @@ export default function Dashboard() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetchWithTimeout(`http://localhost:5001/api/article-data?keyword=${encodeURIComponent(kw)}`, {}, 15000);
+      const res = await fetchWithTimeout(getApiUrl(`/api/article-data?keyword=${encodeURIComponent(kw)}`), {}, 15000);
       const data = await res.json();
       if (data.success) {
         setKeyword(kw);
@@ -601,7 +616,7 @@ export default function Dashboard() {
 
     try {
       const domainData = domains.find(d => d.id === selectedDomain);
-      const response = await fetchWithTimeout('http://localhost:5001/api/analyze', {
+      const response = await fetchWithTimeout(getApiUrl('/api/analyze'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -650,7 +665,7 @@ export default function Dashboard() {
     startProgressTracking(keyword);
 
     try {
-      const response = await fetchWithTimeout('http://localhost:5001/api/generate-article', {
+      const response = await fetchWithTimeout(getApiUrl('/api/generate-article'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ keyword, outline, competitors, tone })
@@ -685,7 +700,7 @@ export default function Dashboard() {
     updateStepStatus(3, 'running');
 
     try {
-      const res = await fetchWithTimeout('http://localhost:5001/api/publish', {
+      const res = await fetchWithTimeout(getApiUrl('/api/publish'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -1088,23 +1103,18 @@ export default function Dashboard() {
             {steps.map((step, idx) => {
               const isCompleted = stepStatuses[idx] === 'completed';
               const isActive = currentStep === idx + 1;
-              const isPending = stepStatuses[idx] === 'pending';
               const isFailed = stepStatuses[idx] === 'failed';
 
-              let statusColor = 'var(--text-muted)';
               let statusBg = 'rgba(148, 163, 184, 0.04)';
               let statusBorder = 'var(--border)';
 
               if (isActive) {
-                statusColor = 'var(--primary)';
                 statusBg = 'var(--primary-glow)';
                 statusBorder = 'rgba(99, 102, 241, 0.3)';
               } else if (isCompleted) {
-                statusColor = 'var(--success)';
                 statusBg = 'rgba(16, 185, 129, 0.05)';
                 statusBorder = 'rgba(16, 185, 129, 0.2)';
               } else if (isFailed) {
-                statusColor = 'var(--error)';
                 statusBg = 'rgba(239, 68, 68, 0.05)';
                 statusBorder = 'rgba(239, 68, 68, 0.2)';
               }
@@ -1689,7 +1699,7 @@ export default function Dashboard() {
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <strong style={{ fontSize: '0.85rem', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                    📜 Otopilot Ajan Günlüğü: "{activeLogKeyword}"
+                    📜 Otopilot Ajan Günlüğü: &quot;{activeLogKeyword}&quot;
                   </strong>
                   <button 
                     onClick={() => setActiveLogKeyword(null)} 
@@ -1795,7 +1805,7 @@ export default function Dashboard() {
             <div style={{ fontSize: '3.5rem', marginBottom: '1.5rem' }}>🤖</div>
             <h3 style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '0.5rem', letterSpacing: '-0.01em' }}>Autopilot Ready</h3>
             <p style={{ color: 'var(--text-secondary)', maxWidth: '420px', fontSize: '0.95rem', opacity: 0.9 }}>
-              Enter a target keyword on the left panel and click "Launch Autopilot" to trigger the autonomous SEO workflow.
+              Enter a target keyword on the left panel and click &quot;Launch Autopilot&quot; to trigger the autonomous SEO workflow.
             </p>
           </div>
 

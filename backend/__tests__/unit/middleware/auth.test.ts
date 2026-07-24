@@ -89,4 +89,15 @@ describe('requireApiKey middleware', () => {
 
     expect(mockNext).toHaveBeenCalled();
   });
+
+  it('should call next() when api_key query param matches', () => {
+    process.env.ADMIN_API_KEY = 'test-secret-key';
+
+    const req = { headers: {}, query: { api_key: 'test-secret-key' } } as unknown as Request;
+    const res = mockResponse() as Response;
+
+    requireApiKey(req, res, mockNext);
+
+    expect(mockNext).toHaveBeenCalled();
+  });
 });
